@@ -160,3 +160,11 @@ const totalsObserver=new ResizeObserver(sizeBottomTotal);
 for(const panel of document.querySelectorAll('.monthly,.daily-bottom'))totalsObserver.observe(panel);
 window.addEventListener('hashchange',()=>requestAnimationFrame(sizeBottomTotal));
 sizeBottomTotal();
+
+if('serviceWorker' in navigator){
+  window.addEventListener('load',()=>{
+    navigator.serviceWorker.register('sw.js').catch(err=>{
+      console.warn('SW registration failed:',err);
+    });
+  });
+}
