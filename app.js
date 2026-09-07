@@ -14,11 +14,11 @@ const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'
 const appIcons={로지:'logi.png',아이콘:'icon.jpeg',콜마너:'call.webp',카카오대리:'kakao.png','T대리':'t.png',오픈마일:'openmile.png'};
 const appIcon=a=>appIcons[a]||'';
 let records=[],selected=localDate(),month=selected.slice(0,7),toastTimer;
-function toast(message){$('toast').textContent=message;$('toast').style.display='block';clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('toast').style.display='none',4200)}
+function toast(message){}
 function validRecord(r){return r&&typeof r.id==='string'&&r.id.length>0&&r.id.length<200&&typeof r.date==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(r.date)&&r.date>='1900-01-01'&&r.date<='9999-12-31'&&localDate(new Date(r.date+'T12:00:00'))===r.date&&typeof r.time==='string'&&/^([01]\d|2[0-3]):[0-5]\d$/.test(r.time)&&['대리 운전','탁송 운전'].includes(r.type)&&['로지','아이콘','콜마너','카카오대리','T대리','오픈마일'].includes(r.app)&&['origin','via','destination'].every(k=>typeof r[k]==='string'&&r[k].length<=200)&&r.origin.trim()&&r.destination.trim()&&(typeof r.mood==='undefined'||['나쁨','보통','좋음'].includes(r.mood))&&(r.feeWaived===undefined||typeof r.feeWaived==='boolean')&&['fare','tip','toll','transit'].every(k=>Number.isSafeInteger(r[k])&&r[k]>=0&&r[k]<=100000000)}
 function validRecords(a){return Array.isArray(a)&&a.length<=100000&&a.every(validRecord)&&new Set(a.map(r=>r.id)).size===a.length}
-try{const saved=localStorage.getItem(KEY);if(saved){const a=JSON.parse(saved);if(!validRecords(a))throw Error();records=a}}catch{toast('저장된 자료를 읽지 못했습니다. 드라이브 백업을 불러와 주세요.')}
-function commit(next){try{localStorage.setItem(KEY,JSON.stringify(next));records=next;render();return true}catch{toast('브라우저 저장 공간이 부족하거나 저장이 차단되었습니다.');return false}}
+try{const saved=localStorage.getItem(KEY);if(saved){const a=JSON.parse(saved);if(!validRecords(a))throw Error();records=a}}catch{}
+function commit(next){try{localStorage.setItem(KEY,JSON.stringify(next));records=next;render();return true}catch{return false}}
 function total(a,fn){return a.reduce((s,r)=>s+fn(r),0)}
 function render(){
  const monthly=records.filter(r=>r.date.startsWith(month));
@@ -60,20 +60,33 @@ function changeMonth(delta){const [y,m]=month.split('-').map(Number),d=new Date(
 $('prev').onclick=()=>changeMonth(-1);$('next').onclick=()=>changeMonth(1);
 render();
 
+let statsMode='month',statsYear=localDate().slice(0,4);
 function syncPage(){
  const hash=location.hash;
  const dayMatch=hash.match(/^#day\/(\d{4}-\d{2}-\d{2})$/);
+ const statsYearMatch=hash.match(/^#stats-year(?:\/(\d{4}))?$/);
  const statsMatch=hash.match(/^#stats(?:\/(\d{4}-\d{2}))?$/);
  const date=dayMatch?.[1];
  const dailyPage=!!date&&date>='1900-01-01'&&date<='9999-12-31'&&localDate(new Date(date+'T12:00:00'))===date;
+ const statsPage=!!statsMatch||!!statsYearMatch;
  const statsMonth=statsMatch?.[1];
- const statsPage=!!statsMatch&&(!statsMonth||(/^\d{4}-\d{2}$/.test(statsMonth)&&Number(statsMonth.slice(0,4))>=1900&&Number(statsMonth.slice(0,4))<=9999));
+ const reqYear=statsYearMatch?.[1];
 
  if(dailyPage){
    selected=date;
    month=date.slice(0,7);
- } else if(statsPage&&statsMonth){
-   month=statsMonth;
+ } else if(statsYearMatch){
+   statsMode='year';
+   if(reqYear&&/^\d{4}$/.test(reqYear)&&Number(reqYear)>=1900&&Number(reqYear)<=9999){
+     statsYear=reqYear;
+   } else {
+     statsYear=month.slice(0,4);
+   }
+ } else if(statsMatch){
+   statsMode='month';
+   if(statsMonth&&/^\d{4}-\d{2}$/.test(statsMonth)&&Number(statsMonth.slice(0,4))>=1900&&Number(statsMonth.slice(0,4))<=9999){
+     month=statsMonth;
+   }
  }
 
  document.body.classList.toggle('daily-page',dailyPage);
@@ -84,8 +97,12 @@ function syncPage(){
  if(dailyPage){
    document.title=`${selected} · 일일 일지`;
  } else if(statsPage){
-   const [y,m]=month.split('-').map(Number);
-   document.title=`${y}년 ${m}월 통계 · 드라이빙 일지`;
+   if(statsMode==='year'){
+     document.title=`${statsYear}년 통계 · 드라이빙 일지`;
+   } else {
+     const [y,m]=month.split('-').map(Number);
+     document.title=`${y}년 ${m}월 통계 · 드라이빙 일지`;
+   }
  } else {
    document.title='드라이빙 일지';
  }
@@ -97,25 +114,96 @@ function syncPage(){
 window.addEventListener('hashchange',syncPage);
 syncPage();
 
-function changeStatsMonth(delta){
- const [y,m]=month.split('-').map(Number),d=new Date(y,m-1+delta,1);
- if(d.getFullYear()<1900||d.getFullYear()>9999)return;
- month=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
- location.hash='stats/'+month;
+function changeStatsPeriod(delta){
+ if(statsMode==='year'){
+   const y=Number(statsYear)+delta;
+   if(y<1900||y>9999)return;
+   statsYear=String(y);
+   location.hash='stats-year/'+statsYear;
+ } else {
+   const [y,m]=month.split('-').map(Number),d=new Date(y,m-1+delta,1);
+   if(d.getFullYear()<1900||d.getFullYear()>9999)return;
+   month=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+   location.hash='stats/'+month;
+ }
 }
-$('stats-prev-month').onclick=()=>changeStatsMonth(-1);
-$('stats-next-month').onclick=()=>changeStatsMonth(1);
+$('stats-prev-month').onclick=()=>changeStatsPeriod(-1);
+$('stats-next-month').onclick=()=>changeStatsPeriod(1);
+$('stats-mode-toggle').onclick=()=>{
+  if(statsMode==='month'){
+    statsMode='year';
+    statsYear=month.slice(0,4);
+    location.hash='stats-year/'+statsYear;
+  } else {
+    statsMode='month';
+    location.hash='stats/'+month;
+  }
+};
 
 const driveMenu=$('drive-menu');
-document.addEventListener('click',e=>{if(!driveMenu.contains(e.target))driveMenu.open=false});
-document.addEventListener('keydown',e=>{if(e.key==='Escape'&&driveMenu.open){driveMenu.open=false;driveMenu.querySelector('summary').focus()}});
+const localMenu=$('local-backup-menu');
+document.addEventListener('click',e=>{
+  if(driveMenu&&!driveMenu.contains(e.target))driveMenu.open=false;
+  if(localMenu&&!localMenu.contains(e.target))localMenu.open=false;
+});
+document.addEventListener('keydown',e=>{
+  if(e.key==='Escape'){
+    if(driveMenu?.open){driveMenu.open=false;driveMenu.querySelector('summary').focus()}
+    if(localMenu?.open){localMenu.open=false;localMenu.querySelector('summary').focus()}
+  }
+});
+$('local-file-import')?.addEventListener('click',()=>{if(localMenu)localMenu.open=false;$('local-file-input')?.click()});
+$('local-file-input')?.addEventListener('change',async e=>{
+  const file=e.target.files?.[0];
+  if(!file)return;
+  try{
+    const text=await file.text();
+    let data;
+    try{data=JSON.parse(text)}catch{throw Error('올바른 JSON 파일이 아닙니다.')}
+    if(!data||data.version!==1||!validRecords(data.records)){
+      throw Error('올바른 운행노트 JSON 백업이 아닙니다. 형식과 필드를 확인해 주세요.');
+    }
+    if(!confirm(`${file.name}\n백업 ${data.records.length}건으로 현재 기록 ${records.length}건을 교체할까요?\n필요하면 취소 후 현재 기록을 먼저 저장하세요.`)){
+      return;
+    }
+    if(!commit(data.records))throw Error('브라우저에 저장하지 못했습니다. 현재 기록은 유지됩니다.');
+    $('settings-dialog').close();
+    toast(`${records.length}건 불러오기 완료`);
+  }catch(err){
+    toast(err.message||'파일을 불러오지 못했습니다.');
+  }finally{
+    e.target.value='';
+  }
+});
+$('local-file-export')?.addEventListener('click',()=>{
+  if(localMenu)localMenu.open=false;
+  const snapshot=JSON.stringify({version:1,exportedAt:new Date().toISOString(),records},null,2);
+  const blob=new Blob([snapshot],{type:'application/json'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download=`운행노트-${localDate()}-${new Date().toTimeString().slice(0,8).replaceAll(':','')}.json`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+  toast('JSON 백업 파일을 다운로드했습니다.');
+});
 $('today-button').onclick=()=>{selected=localDate();month=selected.slice(0,7);location.hash='day/'+selected};
 function renderStats(){
-  const monthly=records.filter(r=>r.date.startsWith(month));
-  const [y,m]=month.split('-').map(Number);
-  $('stats-month-label').textContent=`${y}년 ${m}월`;
-  const totalIncome=total(monthly,r=>r.fare+r.tip),totalExpense=total(monthly,r=>fee(r)+r.toll+r.transit),totalNet=total(monthly,net);
-  const uniqueDays=new Set(monthly.map(r=>r.date)).size,tripCount=monthly.length;
+  const isYear=(statsMode==='year');
+  if($('stats-title'))$('stats-title').textContent=isYear?'연간 통계':'월간 통계';
+  if($('stats-mode-toggle'))$('stats-mode-toggle').textContent=isYear?'월간 통계':'연간 통계';
+
+  let targetRecords;
+  if(isYear){
+    targetRecords=records.filter(r=>r.date.startsWith(statsYear));
+    $('stats-month-label').textContent=`${statsYear}년 전체`;
+  } else {
+    targetRecords=records.filter(r=>r.date.startsWith(month));
+    const [y,m]=month.split('-').map(Number);
+    $('stats-month-label').textContent=`${y}년 ${m}월`;
+  }
+
+  const totalIncome=total(targetRecords,r=>r.fare+r.tip),totalExpense=total(targetRecords,r=>fee(r)+r.toll+r.transit),totalNet=total(targetRecords,net);
+  const uniqueDays=new Set(targetRecords.map(r=>r.date)).size,tripCount=targetRecords.length;
   $('stats-count').textContent=`${tripCount}건`;
   $('stats-days').textContent=`${uniqueDays}일`;
   $('stats-income').textContent=money(totalIncome);
@@ -123,27 +211,33 @@ function renderStats(){
   $('stats-profit').textContent=money(totalNet);
   $('stats-avg-day').textContent=uniqueDays?money(Math.round(totalNet/uniqueDays)):'0원';
   $('stats-avg-trip').textContent=tripCount?money(Math.round(totalNet/tripCount)):'0원';
-  $('stats-avg-fare').textContent=tripCount?money(Math.round(total(monthly,r=>r.fare)/tripCount)):'0원';
-  const tipTrips=monthly.filter(r=>r.tip>0);
-  $('stats-tip').textContent=`${money(total(monthly,r=>r.tip))} (${tipTrips.length}건)`;
+  $('stats-avg-fare').textContent=tripCount?money(Math.round(total(targetRecords,r=>r.fare)/tripCount)):'0원';
+  const tipTrips=targetRecords.filter(r=>r.tip>0);
+  $('stats-tip').textContent=`${money(total(targetRecords,r=>r.tip))} (${tipTrips.length}건)`;
   $('stats-types').innerHTML=['탁송 운전','대리 운전'].map(t=>{
-    const list=monthly.filter(r=>r.type===t),tNet=total(list,net),label=t==='탁송 운전'?'탁송':'대리';
+    const list=targetRecords.filter(r=>r.type===t),tNet=total(list,net),label=t==='탁송 운전'?'탁송':'대리';
     return `<div class="stats-card"><div class="stats-card-header"><span class="trip-type">${label}</span><strong>${list.length}건</strong></div><div class="stats-card-body"><div><span>수입</span> ${money(total(list,r=>r.fare+r.tip))}</div><div><span>수익</span> <strong class="stats-profit-val">${money(tNet)}</strong></div></div></div>`;
   }).join('');
   const apps=['로지','아이콘','콜마너','카카오대리','T대리','오픈마일'];
-  const activeApps=apps.filter(app=>monthly.some(r=>r.app===app));
+  const activeApps=apps.filter(app=>targetRecords.some(r=>r.app===app));
   $('stats-apps').innerHTML=activeApps.length?activeApps.map(app=>{
-    const list=monthly.filter(r=>r.app===app),aNet=total(list,net);
+    const list=targetRecords.filter(r=>r.app===app),aNet=total(list,net);
     return `<div class="stats-app-row"><span class="trip-app"><img src="images/${appIcon(app)}" alt="">${esc(app)}</span><span class="stats-app-count">${list.length}건</span><strong class="stats-app-profit">${money(aNet)}</strong></div>`;
-  }).join(''):'<div class="stats-empty">기록된 앱 운행이 없습니다.</div>';
-  $('stats-fee').textContent=money(total(monthly,fee));
-  $('stats-toll').textContent=money(total(monthly,r=>r.toll));
-  $('stats-transit').textContent=money(total(monthly,r=>r.transit));
-  $('stats-bad').textContent=`${monthly.filter(r=>r.mood==='나쁨').length}건`;
-  $('stats-normal').textContent=`${monthly.filter(r=>r.mood==='보통').length}건`;
-  $('stats-good').textContent=`${monthly.filter(r=>r.mood==='좋음').length}건`;
+  }).join(''):`<div class="stats-empty">${isYear?'기록된 연간 운행이 없습니다.':'기록된 앱 운행이 없습니다.'}</div>`;
+  $('stats-fee').textContent=money(total(targetRecords,fee));
+  $('stats-toll').textContent=money(total(targetRecords,r=>r.toll));
+  $('stats-transit').textContent=money(total(targetRecords,r=>r.transit));
+  $('stats-bad').textContent=`${targetRecords.filter(r=>r.mood==='나쁨').length}건`;
+  $('stats-normal').textContent=`${targetRecords.filter(r=>r.mood==='보통').length}건`;
+  $('stats-good').textContent=`${targetRecords.filter(r=>r.mood==='좋음').length}건`;
 }
-$('stats-open').onclick=()=>{location.hash='stats/'+month};
+$('stats-open').onclick=()=>{
+  if(statsMode==='year'){
+    location.hash='stats-year/'+statsYear;
+  } else {
+    location.hash='stats/'+month;
+  }
+};
 $('settings-open').onclick=()=>{$('settings-rate').value=settings.commissionRate;$('settings-theme').value=settings.theme;$('settings-dialog').showModal()};
 for(const id of ['settings-close','settings-cancel'])$(id).onclick=()=>$('settings-dialog').close();
 $('settings-form').onsubmit=e=>{e.preventDefault();const next={commissionRate:Number($('settings-rate').value),theme:$('settings-theme').value};if(!Number.isFinite(next.commissionRate)||next.commissionRate<0||next.commissionRate>100||!['dark','light'].includes(next.theme))return;try{localStorage.setItem(SETTINGS_KEY,JSON.stringify(next))}catch{toast('설정을 저장하지 못했습니다. 브라우저 저장 공간을 확인해 주세요.');return}settings=next;applySettings();render();preview();$('settings-dialog').close();toast('설정을 저장했습니다.')};

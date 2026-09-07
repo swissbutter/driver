@@ -477,7 +477,7 @@ main {
   top: 0;
   z-index: 15;
   display: grid;
-  grid-template-columns: 50px 1fr 50px;
+  grid-template-columns: 50px 1fr auto;
   align-items: center;
   height: 52px;
   padding: 0 12px;
@@ -487,6 +487,25 @@ main {
 
 .daily-navigation {
   grid-template-columns: 50px 1fr 80px;
+}
+
+.stats-mode-btn {
+  min-height: 36px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 8px;
+  border: 1px solid var(--btn-border);
+  background: var(--btn-bg);
+  color: var(--btn-text);
+  cursor: pointer;
+  white-space: nowrap;
+  justify-self: end;
+}
+
+.stats-mode-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
 }
 
 .daily-navigation a,
@@ -1557,23 +1576,7 @@ input::placeholder, textarea::placeholder {
 
 /* Toast Message */
 #toast {
-  display: none;
-  position: fixed;
-  bottom: max(20px, env(safe-area-inset-bottom));
-  left: 50%;
-  transform: translateX(-50%);
-  background: var(--btn-primary-bg);
-  color: var(--btn-primary-text);
-  max-width: 90%;
-  width: max-content;
-  border-radius: 8px;
-  padding: 10px 16px;
-  font-size: 12px;
-  font-weight: 600;
-  line-height: 1.5;
-  z-index: 100;
-  box-shadow: var(--shadow-lg);
-  pointer-events: none;
+  display: none !important;
 }
 
 /* ==========================================================================

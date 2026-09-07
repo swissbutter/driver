@@ -2,7 +2,7 @@
 const DRIVE_CLIENT_ID='518989825136-qus182hobh099blu9s6408ibe08sptbh.apps.googleusercontent.com';
 const DRIVE_SCOPE='https://www.googleapis.com/auth/drive.file';
 let driveToken='',driveExpires=0,driveBusy=false,drivePage='',driveFiles=[];
-function driveStatus(s){$('drive-status').textContent=s;$('drive-status').hidden=false}
+function driveStatus(s){}
 function driveLock(b){driveBusy=b;for(const id of ['drive-save','drive-load','drive-more'])$(id).disabled=b;for(const button of $('drive-files').querySelectorAll('button'))button.disabled=b}
 function driveAuth(){
  if(driveToken&&Date.now()<driveExpires)return Promise.resolve();
