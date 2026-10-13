@@ -1,4 +1,4 @@
-const CACHE_NAME = "driving-ledger-v2";
+const CACHE_NAME = "driving-ledger-v3";
 const ASSETS = [
   "./",
   "index.html",
@@ -12,6 +12,7 @@ const ASSETS = [
   "images/logi.png",
   "images/openmile.png",
   "images/t.png",
+  "images/etc.svg",
   "images/icon-192.png",
   "images/icon-512.png",
   "images/icon-maskable.png",

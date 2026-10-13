@@ -6,39 +6,51 @@ const money=n=>`${n.toLocaleString('ko-KR')}원`;
 const SETTINGS_KEY='driving-ledger-settings-v1';
 let settings={commissionRate:20,theme:'dark'};
 try{const saved=JSON.parse(localStorage.getItem(SETTINGS_KEY));if(saved&&Number.isFinite(saved.commissionRate)&&saved.commissionRate>=0&&saved.commissionRate<=100&&['dark','light'].includes(saved.theme))settings=saved}catch{}
-function applySettings(){document.documentElement.dataset.theme=settings.theme;document.querySelector('meta[name="theme-color"]').content=settings.theme==='light'?'#f4f6f8':'#111418';for(const label of document.querySelectorAll('[data-fee-label]'))label.textContent=`수수료 (운행비의 ${settings.commissionRate}%)`}
+function applySettings(){document.documentElement.dataset.theme=settings.theme;const meta=document.querySelector('meta[name="theme-color"]');if(meta)meta.content=settings.theme==='light'?'#f4f6f8':'#111418'}
 const fee=r=>r.feeWaived===true?0:Math.round(r.fare*settings.commissionRate/100);
 applySettings();
 const net=r=>r.fare+r.tip-fee(r)-r.toll-r.transit;
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const appIcons={로지:'logi.png',아이콘:'icon.jpeg',콜마너:'call.webp',카카오대리:'kakao.png','T대리':'t.png',오픈마일:'openmile.png'};
+const appIcons={로지:'logi.png',아이콘:'icon.jpeg',콜마너:'call.webp',카카오대리:'kakao.png','T대리':'t.png',오픈마일:'openmile.png',기타:'etc.svg'};
 const appIcon=a=>appIcons[a]||'';
+const typeLabel=t=>t==='탁송 운전'||t==='탁송'?'탁송':t==='대리 운전'||t==='대리'?'대리':'기타';
 let records=[],selected=localDate(),month=selected.slice(0,7),toastTimer;
-function toast(message){}
-function validRecord(r){return r&&typeof r.id==='string'&&r.id.length>0&&r.id.length<200&&typeof r.date==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(r.date)&&r.date>='1900-01-01'&&r.date<='9999-12-31'&&localDate(new Date(r.date+'T12:00:00'))===r.date&&typeof r.time==='string'&&/^([01]\d|2[0-3]):[0-5]\d$/.test(r.time)&&['대리 운전','탁송 운전'].includes(r.type)&&['로지','아이콘','콜마너','카카오대리','T대리','오픈마일'].includes(r.app)&&['origin','via','destination'].every(k=>typeof r[k]==='string'&&r[k].length<=200)&&r.origin.trim()&&r.destination.trim()&&(typeof r.mood==='undefined'||['나쁨','보통','좋음'].includes(r.mood))&&(r.feeWaived===undefined||typeof r.feeWaived==='boolean')&&['fare','tip','toll','transit'].every(k=>Number.isSafeInteger(r[k])&&r[k]>=0&&r[k]<=100000000)}
+function toast(message){const el=$('toast');if(!el||!message)return;el.textContent=message;el.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>{el.classList.remove('show')},2600)}
+function validRecord(r){return r&&typeof r.id==='string'&&r.id.length>0&&r.id.length<200&&typeof r.date==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(r.date)&&r.date>='1900-01-01'&&r.date<='9999-12-31'&&localDate(new Date(r.date+'T12:00:00'))===r.date&&typeof r.time==='string'&&/^([01]\d|2[0-3]):[0-5]\d$/.test(r.time)&&['대리 운전','탁송 운전','대리','탁송','기타','기타 운전'].includes(r.type)&&['로지','아이콘','콜마너','카카오대리','T대리','오픈마일','기타'].includes(r.app)&&['origin','via','destination'].every(k=>typeof r[k]==='string'&&r[k].length<=200)&&r.origin.trim()&&r.destination.trim()&&(typeof r.mood==='undefined'||['나쁨','보통','좋음'].includes(r.mood))&&(r.feeWaived===undefined||typeof r.feeWaived==='boolean')&&['fare','tip','toll','transit'].every(k=>Number.isSafeInteger(r[k])&&r[k]>=0&&r[k]<=100000000)}
 function validRecords(a){return Array.isArray(a)&&a.length<=100000&&a.every(validRecord)&&new Set(a.map(r=>r.id)).size===a.length}
 try{const saved=localStorage.getItem(KEY);if(saved){const a=JSON.parse(saved);if(!validRecords(a))throw Error();records=a}}catch{}
 function commit(next){try{localStorage.setItem(KEY,JSON.stringify(next));records=next;render();return true}catch{return false}}
 function total(a,fn){return a.reduce((s,r)=>s+fn(r),0)}
 function render(){
  const monthly=records.filter(r=>r.date.startsWith(month));
- $('month-net').textContent=money(total(monthly,net));$('month-income').textContent=money(total(monthly,r=>r.fare+r.tip));$('month-expense').textContent=money(total(monthly,r=>fee(r)+r.toll+r.transit));$('month-count').textContent=`${Number(month.split('-')[1])}월 · ${monthly.length}건의 운행`;
+ let mIncome=0,mExpense=0,mNet=0;
+ const grouped=new Map();
+ for(const r of monthly){
+   const f=fee(r),inc=r.fare+r.tip,exp=f+r.toll+r.transit;
+   mIncome+=inc;mExpense+=exp;mNet+=inc-exp;
+   let arr=grouped.get(r.date);if(!arr){arr=[];grouped.set(r.date,arr)}arr.push(r);
+ }
+ $('month-net').textContent=money(mNet);$('month-income').textContent=money(mIncome);$('month-expense').textContent=money(mExpense);$('month-count').textContent=`${Number(month.split('-')[1])}월 · ${monthly.length}건의 운행`;
  const [y,m]=month.split('-').map(Number);$('month-label').textContent=`${y}년 ${m}월`;
- const first=new Date(y,m-1,1).getDay(),days=new Date(y,m,0).getDate();
- const grouped=new Map();for(const r of monthly){if(!grouped.has(r.date))grouped.set(r.date,[]);grouped.get(r.date).push(r)}
+ const first=new Date(y,m-1,1).getDay(),days=new Date(y,m,0).getDate(),today=localDate();
  let html='<div aria-hidden="true"></div>'.repeat(first);
- for(let d=1;d<=days;d++){const date=`${month}-${String(d).padStart(2,'0')}`,a=grouped.get(date)||[],value=total(a,net);html+=`<button class="day ${date===localDate()?'today':''} ${date===selected?'selected':''} ${(first+d-1)%7===0?'sunday':(first+d-1)%7===6?'saturday':''}" data-date="${date}" aria-label="${m}월 ${d}일, ${a.length}건${a.length?', 실수입 '+money(value):''}" aria-pressed="${date===selected}" ${date===localDate()?'aria-current="date"':''}><span class="number">${d}</span>${a.length?`<span class="day-calls">${a.length}콜</span><span class="amount">${money(value)}</span>`:''}</button>`}
+ for(let d=1;d<=days;d++){
+   const date=`${month}-${String(d).padStart(2,'0')}`,a=grouped.get(date)||[];
+   const value=a.length?total(a,net):0,dayOfWeek=(first+d-1)%7;
+   html+=`<button class="day ${date===today?'today':''} ${date===selected?'selected':''} ${dayOfWeek===0?'sunday':dayOfWeek===6?'saturday':''}" data-date="${date}" aria-label="${m}월 ${d}일, ${a.length}건${a.length?', 실수입 '+money(value):''}" aria-pressed="${date===selected}" ${date===today?'aria-current="date"':''}><span class="number">${d}</span>${a.length?`<span class="day-calls">${a.length}콜</span><span class="amount">${money(value)}</span>`:''}</button>`;
+ }
  $('calendar').innerHTML=html;
  const daily=records.filter(r=>r.date===selected).sort((a,b)=>a.time.localeCompare(b.time));
- $('day-label').textContent=selected;$('day-count').textContent=selected;$('day-net').textContent=money(total(daily,net));
- $('entries').innerHTML=daily.length?daily.map(r=>`<article class="entry compact-entry" role="button" tabindex="0" data-detail="${esc(r.id)}" aria-label="${esc(r.time)} ${esc(r.origin)} 운행 상세"><div class="trip-line"><time>${esc(r.time)}</time><span class="trip-type">${r.type==='탁송 운전'?'탁송':'대리'}</span><span class="trip-app"><img src="images/${appIcon(r.app)}" alt="">${esc(r.app)}</span><span class="trip-income"><span>수입</span><strong>${money(r.fare+r.tip)}</strong></span></div><div class="trip-route"><div class="trip-origin">🚘 ${esc(r.origin)}</div>${r.via?`<div class="trip-via">🛼 ${esc(r.via)}</div>`:''}<div class="trip-destination">🏡 ${esc(r.destination)}</div></div></article>`).join(''):'<div class="empty"><strong>운행 기록이 없습니다</strong><p>상단 일지 입력 버튼으로 기록을 추가하세요.</p></div>';
- $('daily-income').textContent=money(total(daily,r=>r.fare+r.tip));
- $('daily-expense').textContent=money(total(daily,r=>fee(r)+r.toll+r.transit));
- $('daily-profit').textContent=money(total(daily,net));
- $('daily-total-count').textContent=`${daily.length}건`;
-
+ let dIncome=0,dExpense=0,dNet=0;
+ for(const r of daily){
+   const f=fee(r),inc=r.fare+r.tip,exp=f+r.toll+r.transit;
+   dIncome+=inc;dExpense+=exp;dNet+=inc-exp;
+ }
+ $('day-label').textContent=selected;$('day-count').textContent=selected;$('day-net').textContent=money(dNet);
+ $('entries').innerHTML=daily.length?daily.map(r=>`<article class="entry compact-entry" role="button" tabindex="0" data-detail="${esc(r.id)}" aria-label="${esc(r.time)} ${esc(r.origin)} 운행 상세"><div class="trip-line"><time>${esc(r.time)}</time><span class="trip-type">${typeLabel(r.type)}</span><span class="trip-app">${appIcon(r.app)?`<img src="images/${appIcon(r.app)}" alt="">`:''}${esc(r.app)}</span><span class="trip-income"><span>수입</span><strong>${money(r.fare+r.tip)}</strong></span></div><div class="trip-route"><div class="trip-origin">🚘 ${esc(r.origin)}</div>${r.via?`<div class="trip-via">🛼 ${esc(r.via)}</div>`:''}<div class="trip-destination">🏡 ${esc(r.destination)}</div></div></article>`).join(''):'<div class="empty"><strong>운행 기록이 없습니다</strong><p>상단 일지 입력 버튼으로 기록을 추가하세요.</p></div>';
+ $('daily-income').textContent=money(dIncome);$('daily-expense').textContent=money(dExpense);$('daily-profit').textContent=money(dNet);$('daily-total-count').textContent=`${daily.length}건`;
 }
-function openEditor(record){const form=$('form');form.reset();form.elements.id.value='';form.elements.date.min='1900-01-01';form.elements.date.max='9999-12-31';form.elements.date.value=selected;form.elements.time.value=new Date().toTimeString().slice(0,5);if(record)for(const k of ['id','date','time','type','app','origin','via','destination','mood','fare','tip','toll','transit'])if(record[k]!==undefined)form.elements[k].value=record[k];form.elements.feeWaived.value=String(record?.feeWaived===true);$('form-title').textContent=record?'운행 기록 수정':'운행 기록 추가';preview();$('editor').showModal()}
+function openEditor(record){const form=$('form');form.reset();form.elements.id.value='';form.elements.date.min='1900-01-01';form.elements.date.max='9999-12-31';form.elements.date.value=selected;form.elements.time.value=new Date().toTimeString().slice(0,5);if(record)for(const k of ['id','date','time','type','app','origin','via','destination','mood','fare','tip','toll','transit'])if(record[k]!==undefined){if(k==='type'&&record[k]==='기타 운전')form.elements[k].value='기타';else form.elements[k].value=record[k]}form.elements.feeWaived.value=String(record?.feeWaived===true);$('form-title').textContent=record?'운행 기록 수정':'운행 기록 추가';preview();$('editor').showModal()}
 function preview(){const form=$('form');const r=Object.fromEntries(['fare','tip','toll','transit'].map(k=>[k,Number(form.elements[k].value)||0]));r.feeWaived=form.elements.feeWaived.value==='true';$('fee-amount').value=money(fee(r));$('fee-mode').textContent=r.feeWaived?'면제':`${settings.commissionRate}%`;$('fee-zero').textContent=r.feeWaived?'자동':'0원';$('fee-zero').setAttribute('aria-pressed',String(r.feeWaived));$('preview-net').textContent=money(net(r))}
 $('extra-plus').onclick=()=>{const input=$('form').elements.tip;input.value=Math.min(100000000,Math.max(0,Number(input.value)||0)+5000);preview()};
 $('fee-zero').onclick=()=>{const input=$('form').elements.feeWaived;input.value=input.value==='true'?'false':'true';preview()};
@@ -49,10 +61,13 @@ $('calendar').onclick=e=>{const b=e.target.closest('[data-date]');if(b){location
 $('entries').onclick=e=>{const card=e.target.closest('[data-detail]');if(card)openTripDetail(card.dataset.detail)};
 $('entries').addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){const card=e.target.closest('[data-detail]');if(card){e.preventDefault();openTripDetail(card.dataset.detail)}}});
 let detailId=null;
-function openTripDetail(id){const r=records.find(r=>r.id===id);if(!r)return;detailId=id;const icon=appIcon(r.app);$('detail-app-icon').src=icon?`images/${icon}`:'';$('detail-app-icon').alt=r.app||'';$('detail-app-icon').style.display=icon?'inline-block':'none';for(const key of ['time','origin','via','destination'])$('detail-'+key).textContent=r[key]||'';$('detail-via-row').hidden=!r.via;$('detail-mood').textContent=r.mood||'보통';$('detail-income').textContent=money(r.fare+r.tip);$('trip-detail').showModal()}
+function openTripDetail(id){const r=records.find(r=>r.id===id);if(!r)return;detailId=id;const icon=appIcon(r.app);$('detail-app-icon').src=icon?`images/${icon}`:'';$('detail-app-icon').alt=r.app||'';$('detail-app-icon').style.display=icon?'inline-block':'none';for(const key of ['time','origin','via','destination'])$('detail-'+key).textContent=r[key]||'';$('detail-type').textContent=typeLabel(r.type);$('detail-app').textContent=r.app||'';$('detail-fare').textContent=money(r.fare);$('detail-fee').textContent=r.feeWaived?'0원 (면제)':money(fee(r));$('detail-tip').textContent=money(r.tip);$('detail-tip-row').hidden=!r.tip;$('detail-toll').textContent=money(r.toll);$('detail-toll-row').hidden=!r.toll;$('detail-transit').textContent=money(r.transit);$('detail-transit-row').hidden=!r.transit;$('detail-via-row').hidden=!r.via;$('detail-mood').textContent=r.mood||'보통';$('detail-profit').textContent=money(net(r));$('trip-detail').showModal()}
 $('detail-cancel').onclick=()=>$('trip-detail').close();
 $('detail-edit').onclick=()=>{const r=records.find(r=>r.id===detailId);$('trip-detail').close();if(r)openEditor(r)};
 $('detail-delete').onclick=()=>{if(!records.some(r=>r.id===detailId))return;if(confirm('이 운행 기록을 삭제할까요?')&&commit(records.filter(r=>r.id!==detailId))){$('trip-detail').close();toast('운행 기록을 삭제했습니다.')}};
+for(const dlg of [$('editor'),$('trip-detail'),$('settings-dialog')])dlg?.addEventListener('click',e=>{if(e.target===dlg)dlg.close()});
+$('back-calendar')?.addEventListener('click',e=>{e.preventDefault();location.hash=''});
+$('stats-back-calendar')?.addEventListener('click',e=>{e.preventDefault();location.hash=''});
 function changeDay(delta){const date=new Date(selected+'T12:00:00');date.setDate(date.getDate()+delta);if(date.getFullYear()<1900||date.getFullYear()>9999)return;location.hash='day/'+localDate(date)}
 $('prev-day').onclick=()=>changeDay(-1);$('next-day').onclick=()=>changeDay(1);
 
@@ -202,8 +217,31 @@ function renderStats(){
     $('stats-month-label').textContent=`${y}년 ${m}월`;
   }
 
-  const totalIncome=total(targetRecords,r=>r.fare+r.tip),totalExpense=total(targetRecords,r=>fee(r)+r.toll+r.transit),totalNet=total(targetRecords,net);
-  const uniqueDays=new Set(targetRecords.map(r=>r.date)).size,tripCount=targetRecords.length;
+  let totalIncome=0,totalExpense=0,totalNet=0,fareSum=0,tipSum=0,tipCount=0;
+  let feeSum=0,tollSum=0,transitSum=0;
+  let badMood=0,normalMood=0,goodMood=0;
+  const uniqueDates=new Set();
+  const typeStats={탁송:{count:0,income:0,net:0},대리:{count:0,income:0,net:0},기타:{count:0,income:0,net:0}};
+  const appStats=new Map();
+
+  for(const r of targetRecords){
+    uniqueDates.add(r.date);
+    const f=fee(r),inc=r.fare+r.tip,exp=f+r.toll+r.transit,netVal=inc-exp;
+    totalIncome+=inc;totalExpense+=exp;totalNet+=netVal;
+    fareSum+=r.fare;feeSum+=f;tollSum+=r.toll;transitSum+=r.transit;
+    if(r.tip>0){tipSum+=r.tip;tipCount++}
+    if(r.mood==='나쁨')badMood++;
+    else if(r.mood==='좋음')goodMood++;
+    else normalMood++;
+    const tLabel=typeLabel(r.type);
+    const ts=typeStats[tLabel]||typeStats['기타'];
+    ts.count++;ts.income+=inc;ts.net+=netVal;
+    let as=appStats.get(r.app);
+    if(!as){as={count:0,net:0};appStats.set(r.app,as)}
+    as.count++;as.net+=netVal;
+  }
+
+  const tripCount=targetRecords.length,uniqueDays=uniqueDates.size;
   $('stats-count').textContent=`${tripCount}건`;
   $('stats-days').textContent=`${uniqueDays}일`;
   $('stats-income').textContent=money(totalIncome);
@@ -211,25 +249,27 @@ function renderStats(){
   $('stats-profit').textContent=money(totalNet);
   $('stats-avg-day').textContent=uniqueDays?money(Math.round(totalNet/uniqueDays)):'0원';
   $('stats-avg-trip').textContent=tripCount?money(Math.round(totalNet/tripCount)):'0원';
-  $('stats-avg-fare').textContent=tripCount?money(Math.round(total(targetRecords,r=>r.fare)/tripCount)):'0원';
-  const tipTrips=targetRecords.filter(r=>r.tip>0);
-  $('stats-tip').textContent=`${money(total(targetRecords,r=>r.tip))} (${tipTrips.length}건)`;
-  $('stats-types').innerHTML=['탁송 운전','대리 운전'].map(t=>{
-    const list=targetRecords.filter(r=>r.type===t),tNet=total(list,net),label=t==='탁송 운전'?'탁송':'대리';
-    return `<div class="stats-card"><div class="stats-card-header"><span class="trip-type">${label}</span><strong>${list.length}건</strong></div><div class="stats-card-body"><div><span>수입</span> ${money(total(list,r=>r.fare+r.tip))}</div><div><span>수익</span> <strong class="stats-profit-val">${money(tNet)}</strong></div></div></div>`;
+  $('stats-avg-fare').textContent=tripCount?money(Math.round(fareSum/tripCount)):'0원';
+  $('stats-tip').textContent=`${money(tipSum)} (${tipCount}건)`;
+
+  $('stats-types').innerHTML=['탁송','대리','기타'].map(label=>{
+    const st=typeStats[label];
+    return `<div class="stats-card"><div class="stats-card-header"><span class="trip-type">${label}</span><strong>${st.count}건</strong></div><div class="stats-card-body"><div><span>수입</span> ${money(st.income)}</div><div><span>수익</span> <strong class="stats-profit-val">${money(st.net)}</strong></div></div></div>`;
   }).join('');
-  const apps=['로지','아이콘','콜마너','카카오대리','T대리','오픈마일'];
-  const activeApps=apps.filter(app=>targetRecords.some(r=>r.app===app));
+
+  const apps=['로지','아이콘','콜마너','카카오대리','T대리','오픈마일','기타'];
+  const activeApps=apps.filter(app=>appStats.has(app));
   $('stats-apps').innerHTML=activeApps.length?activeApps.map(app=>{
-    const list=targetRecords.filter(r=>r.app===app),aNet=total(list,net);
-    return `<div class="stats-app-row"><span class="trip-app"><img src="images/${appIcon(app)}" alt="">${esc(app)}</span><span class="stats-app-count">${list.length}건</span><strong class="stats-app-profit">${money(aNet)}</strong></div>`;
+    const st=appStats.get(app);
+    return `<div class="stats-app-row"><span class="trip-app">${appIcon(app)?`<img src="images/${appIcon(app)}" alt="">`:''}${esc(app)}</span><span class="stats-app-count">${st.count}건</span><strong class="stats-app-profit">${money(st.net)}</strong></div>`;
   }).join(''):`<div class="stats-empty">${isYear?'기록된 연간 운행이 없습니다.':'기록된 앱 운행이 없습니다.'}</div>`;
-  $('stats-fee').textContent=money(total(targetRecords,fee));
-  $('stats-toll').textContent=money(total(targetRecords,r=>r.toll));
-  $('stats-transit').textContent=money(total(targetRecords,r=>r.transit));
-  $('stats-bad').textContent=`${targetRecords.filter(r=>r.mood==='나쁨').length}건`;
-  $('stats-normal').textContent=`${targetRecords.filter(r=>r.mood==='보통').length}건`;
-  $('stats-good').textContent=`${targetRecords.filter(r=>r.mood==='좋음').length}건`;
+
+  $('stats-fee').textContent=money(feeSum);
+  $('stats-toll').textContent=money(tollSum);
+  $('stats-transit').textContent=money(transitSum);
+  $('stats-bad').textContent=`${badMood}건`;
+  $('stats-normal').textContent=`${normalMood}건`;
+  $('stats-good').textContent=`${goodMood}건`;
 }
 $('stats-open').onclick=()=>{
   if(statsMode==='year'){

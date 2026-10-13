@@ -2,7 +2,7 @@
 const DRIVE_CLIENT_ID='518989825136-qus182hobh099blu9s6408ibe08sptbh.apps.googleusercontent.com';
 const DRIVE_SCOPE='https://www.googleapis.com/auth/drive.file';
 let driveToken='',driveExpires=0,driveBusy=false,drivePage='',driveFiles=[];
-function driveStatus(s){}
+function driveStatus(s){const el=$('drive-status');if(!el)return;if(!s){el.hidden=true;el.textContent='';return}el.textContent=s;el.hidden=false}
 function driveLock(b){driveBusy=b;for(const id of ['drive-save','drive-load','drive-more'])$(id).disabled=b;for(const button of $('drive-files').querySelectorAll('button'))button.disabled=b}
 function driveAuth(){
  if(driveToken&&Date.now()<driveExpires)return Promise.resolve();
@@ -53,4 +53,4 @@ async function restoreDrive(file){
  if(!confirm(`${file.name}\n백업 ${data.records.length}건으로 현재 기록 ${records.length}건을 교체할까요?\n필요하면 취소 후 현재 기록을 먼저 저장하세요.`)){driveStatus('불러오기를 취소했습니다.');return}
  if(!commit(data.records))throw Error('브라우저에 저장하지 못했습니다. 현재 기록은 유지됩니다.');$('drive-picker').close();driveStatus(`${records.length}건 불러오기 완료`);toast('드라이브 백업을 불러왔습니다.');
 }
-$('drive-save').onclick=()=>driveRun(saveDrive);$('drive-load').onclick=()=>driveRun(()=>listDrive());$('drive-more').onclick=()=>driveRun(()=>listDrive(true));$('drive-close').onclick=()=>$('drive-picker').close();
+$('drive-save').onclick=()=>driveRun(saveDrive);$('drive-load').onclick=()=>driveRun(()=>listDrive());$('drive-more').onclick=()=>driveRun(()=>listDrive(true));$('drive-close').onclick=()=>$('drive-picker').close();$('drive-picker').onclick=e=>{if(e.target===$('drive-picker'))$('drive-picker').close()};
